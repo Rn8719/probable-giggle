@@ -5,7 +5,7 @@
    纯前端记账应用：记一笔 / 智能导入 / 区间统计 / 明细管理
    ============================================================ */
 
-const APP_VERSION = "8.0.0";
+const APP_VERSION = "9.0.0";
 const STORAGE_KEY = "dongdong-ledger.records";
 const LEGACY_STORAGE_KEY = "xiaoman-ledger.records";
 const WELCOME_KEY = "dongdong-ledger.welcomed";
@@ -1825,6 +1825,15 @@ function ocrProgressMessage(progress) {
   return progress.status ? `${progress.status} ${percent}%` : "正在准备识别...";
 }
 
+async function resetOcrWorker() {
+  if (ocrWorker) {
+    try { await ocrWorker.terminate(); } catch (error) { console.warn(error); }
+  }
+  ocrWorker = null;
+  ocrWorkerPromise = null;
+  return getOcrWorker();
+}
+
 async function getOcrWorker() {
   if (ocrWorker) return ocrWorker;
   if (ocrWorkerPromise) return ocrWorkerPromise;
@@ -2089,7 +2098,7 @@ async function recognizeBillScreenshot() {
   setOcrStatus("正在准备识别...", { busy: true });
   let tempUrl = "";
   try {
-    const worker = await getOcrWorker();
+    let worker = await getOcrWorker();
     tempUrl = URL.createObjectURL(state.ocrFile);
     const image = new Image();
     image.src = tempUrl;
@@ -2106,7 +2115,15 @@ async function recognizeBillScreenshot() {
     const fullCanvas = makeOcrCanvas(image, { x: 0, y: 0, w: width, h: height }, fullScale, 220);
     const dateCanvas = makeOcrCanvas(image, { x: cropX, y: cropY, w: cropW, h: cropH }, dateScale, 215);
     setOcrStatus("正在识别整张账单...", { busy: true });
-    const fullResult = await worker.recognize(fullCanvas, {}, { text: true, blocks: true });
+    let fullResult;
+    try {
+      fullResult = await worker.recognize(fullCanvas, {}, { text: true, blocks: true });
+    } catch (error) {
+      console.warn("OCR 组件第一次加载失败，正在自动重试", error);
+      setOcrStatus("识别组件加载失败，正在自动重试...", { busy: true });
+      worker = await resetOcrWorker();
+      fullResult = await worker.recognize(fullCanvas, {}, { text: true, blocks: true });
+    }
     setOcrStatus("正在识别每笔日期...", { busy: true });
     const dateResult = await worker.recognize(dateCanvas, {}, { text: true, blocks: true });
     let parsed = parseOcrBill(fullResult.data, dateResult.data, {
@@ -2677,7 +2694,7 @@ function exportBackup() {
   }
   const payload = {
     app: "东东账本",
-    version: 8,
+    version: 9,
     exportedAt: new Date().toISOString(),
     records: state.records
   };

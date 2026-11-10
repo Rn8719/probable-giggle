@@ -1,11 +1,11 @@
-﻿const CACHE_NAME = "dongdong-ledger-v8.0.0";
+﻿const CACHE_NAME = "dongdong-ledger-v9.0.0";
 const CORE_ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
-  "./styles.css?v=8.0.0",
+  "./styles.css?v=9.0.0",
   "./app.js",
-  "./app.js?v=8.0.0",
+  "./app.js?v=9.0.0",
   "./manifest.webmanifest",
   "./vendor/xlsx.full.min.js",
   "./vendor/tesseract/tesseract.min.js",
