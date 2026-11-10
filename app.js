@@ -5,7 +5,7 @@
    纯前端记账应用：记一笔 / 智能导入 / 区间统计 / 明细管理
    ============================================================ */
 
-const APP_VERSION = "9.0.0";
+const APP_VERSION = "10.0.0";
 const STORAGE_KEY = "dongdong-ledger.records";
 const LEGACY_STORAGE_KEY = "xiaoman-ledger.records";
 const WELCOME_KEY = "dongdong-ledger.welcomed";
@@ -903,6 +903,8 @@ const state = {
   ocrFile: null,
   ocrPreviewUrl: "",
   ocrBusy: false,
+  billFile: null,
+  billBusy: false,
   editingId: null,
   page: "add",
   report: {
@@ -944,6 +946,8 @@ function normalizeRecord(raw) {
     amount: cents / 100,
     type,
     category,
+    externalId: typeof raw.externalId === "string" ? raw.externalId.slice(0, 120) : "",
+    source: typeof raw.source === "string" ? raw.source.slice(0, 30) : "",
     createdAt: typeof raw.createdAt === "string" ? raw.createdAt : new Date().toISOString()
   };
 }
@@ -1187,6 +1191,13 @@ function cacheElements() {
   el.ocrPreviewImage = $("#ocrPreviewImage");
   el.recognizeImageButton = $("#recognizeImageButton");
   el.ocrStatus = $("#ocrStatus");
+  el.billImportPanel = $("#billImportPanel");
+  el.billInput = $("#billInput");
+  el.billDropzone = $("#billDropzone");
+  el.billFileName = $("#billFileName");
+  el.billZipPassword = $("#billZipPassword");
+  el.billStatus = $("#billStatus");
+  el.importBillButton = $("#importBillButton");
   el.importText = $("#importText");
   el.sampleButton = $("#sampleButton");
   el.parseTextButton = $("#parseTextButton");
@@ -1540,7 +1551,7 @@ function renderAll() {
 }
 /* ---------- Import page ---------- */
 function setImportMode(mode) {
-  state.importMode = mode === "file" ? "file" : mode === "image" ? "image" : "text";
+  state.importMode = mode === "file" ? "file" : mode === "image" ? "image" : mode === "bill" ? "bill" : "text";
   $$("button", el.importMode).forEach((button) => {
     const active = button.dataset.importMode === state.importMode;
     button.classList.toggle("is-active", active);
@@ -1549,6 +1560,7 @@ function setImportMode(mode) {
   el.textImportPanel.hidden = state.importMode !== "text";
   el.fileImportPanel.hidden = state.importMode !== "file";
   el.imageImportPanel.hidden = state.importMode !== "image";
+  el.billImportPanel.hidden = state.importMode !== "bill";
 }
 
 function categoryOptions(selected) {
@@ -1793,6 +1805,265 @@ async function handleSpreadsheetFile(file) {
   }
 }
 
+/* ---------- WeChat / Alipay official bill import ---------- */
+let zipConfigured = false;
+
+function setBillStatus(message, options = {}) {
+  if (!el.billStatus) return;
+  el.billStatus.textContent = message;
+  el.billStatus.classList.toggle("is-busy", Boolean(options.busy));
+  el.billStatus.classList.toggle("is-error", Boolean(options.error));
+}
+
+function handleBillFile(file) {
+  if (!file) return;
+  if (!/\.(zip|xlsx|xls|csv)$/i.test(file.name)) {
+    showToast("请选择微信/支付宝导出的 ZIP、XLSX、XLS 或 CSV", "error");
+    return;
+  }
+  state.billFile = file;
+  state.importItems = [];
+  state.importHint = "";
+  el.importPreview.hidden = true;
+  el.billFileName.textContent = file.name;
+  el.billZipPassword.value = "";
+  el.importBillButton.disabled = false;
+  setBillStatus("文件已选择，点“读取账单”开始识别");
+}
+
+async function loadZipScript() {
+  if (window.zip) return window.zip;
+  await new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = new URL("vendor/zip/zip.min.js", location.href).href;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("ZIP 组件加载失败"));
+    document.head.appendChild(script);
+  });
+  if (!window.zip) throw new Error("ZIP 组件不可用");
+  return window.zip;
+}
+
+async function extractZipBill(file, password) {
+  const lib = await loadZipScript();
+  if (!zipConfigured && typeof lib.configure === "function") {
+    lib.configure({ useWebWorkers: false });
+    zipConfigured = true;
+  }
+  const reader = new lib.ZipReader(new lib.BlobReader(file), { password: password || undefined });
+  try {
+    const entries = await reader.getEntries();
+    const candidates = entries
+      .filter((entry) => !entry.directory && /\.(csv|xlsx|xls)$/i.test(entry.filename || ""))
+      .sort((a, b) => (b.uncompressedSize || 0) - (a.uncompressedSize || 0));
+    if (!candidates.length) throw new Error("ZIP 里没有找到 CSV/XLSX 账单文件");
+    const entry = candidates[0];
+    const data = await entry.getData(new lib.Uint8ArrayWriter());
+    const buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+    return { buffer, name: entry.filename || file.name, platformHint: "" };
+  } finally {
+    await reader.close().catch(() => {});
+  }
+}
+
+function officialPlatform(rows, filename) {
+  const head = rows.slice(0, 30).flat().map((cell) => normalizeName(cell)).join(" ");
+  const text = `${head} ${filename || ""}`;
+  if (/微信支付|微信账单|微信/.test(text)) return "微信";
+  if (/支付宝|alipay/i.test(text)) return "支付宝";
+  return "官方账单";
+}
+
+function buildOfficialHeaderMap(row) {
+  const map = { date: -1, name: -1, amount: -1, type: -1, status: -1, externalId: -1 };
+  if (!Array.isArray(row)) return null;
+  row.forEach((cell, index) => {
+    const key = normalizeHeader(cell);
+    if (!key) return;
+    if (map.date < 0 && /(交易时间|交易日期|付款时间|创建时间|时间)/.test(key)) map.date = index;
+    if (map.name < 0 && /(交易对方|对方|商户名称|交易对象|收款方|付款方|商户|名称)/.test(key)) map.name = index;
+    if (map.amount < 0 && /(金额|交易金额|订单金额)/.test(key)) map.amount = index;
+    if (map.type < 0 && /^(收支|收入支出|资金方向|借贷方向|收付方向)$/.test(key)) map.type = index;
+    if (map.status < 0 && /(当前状态|交易状态|状态)/.test(key)) map.status = index;
+    if (map.externalId < 0 && /(交易单号|交易订单号|订单号|流水号|交易号)/.test(key)) map.externalId = index;
+  });
+  return map.date >= 0 && map.name >= 0 && map.amount >= 0 && map.type >= 0 ? map : null;
+}
+
+function officialDate(value) {
+  const iso = dateFromCell(value);
+  if (iso) return iso;
+  const match = String(value == null ? "" : value).match(/(20\d{2})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  if (match && isValidYMD(Number(match[1]), Number(match[2]), Number(match[3]))) {
+    return isoFromYMD(Number(match[1]), Number(match[2]), Number(match[3]));
+  }
+  return "";
+}
+
+function parseOfficialBillRows(rows, filename = "") {
+  const sourceRows = (Array.isArray(rows) ? rows : [])
+    .map((row) => (Array.isArray(row) ? row : []))
+    .filter((row) => row.some((cell) => cell !== null && cell !== undefined && normalizeName(cell) !== ""));
+  if (!sourceRows.length) return { items: [], warnings: [], platform: "", skipped: 0, headerRow: -1 };
+
+  let headerMap = null;
+  let headerIndex = -1;
+  for (let i = 0; i < Math.min(50, sourceRows.length); i += 1) {
+    const map = buildOfficialHeaderMap(sourceRows[i]);
+    if (map) {
+      headerMap = map;
+      headerIndex = i;
+      break;
+    }
+  }
+  if (!headerMap) throw new Error("没有找到官方账单表头");
+
+  const platform = officialPlatform(sourceRows, filename);
+  const dataRows = sourceRows.slice(headerIndex + 1);
+  const items = [];
+  const warnings = [];
+  let skipped = 0;
+
+  dataRows.forEach((row, index) => {
+    if (!row.some((cell) => normalizeName(cell) !== "")) return;
+    const rowNumber = headerIndex + index + 2;
+    const type = typeFromCell(row[headerMap.type]);
+    if (!type) {
+      skipped += 1;
+      return;
+    }
+    const status = headerMap.status >= 0 ? normalizeName(row[headerMap.status]) : "";
+    if (status && /(关闭|失败|取消|撤销|已失效|待付款|处理中|退款关闭)/.test(status)) {
+      skipped += 1;
+      return;
+    }
+    const date = officialDate(row[headerMap.date]);
+    if (!date) {
+      warnings.push(`第 ${rowNumber} 行没有识别到日期，已跳过`);
+      skipped += 1;
+      return;
+    }
+    const amount = amountFromCell(row[headerMap.amount]);
+    if (amount == null) {
+      warnings.push(`第 ${rowNumber} 行没有识别到金额，已跳过`);
+      skipped += 1;
+      return;
+    }
+    const name = normalizeName(row[headerMap.name]).slice(0, 40)
+      || (type === "income" ? "未命名收入" : "未命名支出");
+    const rawExternalId = headerMap.externalId >= 0 ? normalizeName(row[headerMap.externalId]) : "";
+    items.push({
+      id: `imp_${uid()}`,
+      date,
+      name,
+      amount: Number(amount.toFixed(2)),
+      type,
+      category: classifyTransaction(name, type),
+      selected: true,
+      dateGuessed: false,
+      externalId: rawExternalId ? `${platform}:${rawExternalId}` : "",
+      source: `${platform}账单`,
+      sourceLine: `${platform}账单`
+    });
+  });
+
+  return { items, warnings, platform, skipped, headerRow: headerIndex + 1 };
+}
+
+function rowsFromWorkbookBuffer(buffer, filename) {
+  if (!window.XLSX) throw new Error("表格组件没有加载");
+  let workbook;
+  if (/\.csv$/i.test(filename)) {
+    let text;
+    try {
+      text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+    } catch (error) {
+      text = new TextDecoder("gb18030").decode(buffer);
+    }
+    workbook = XLSX.read(text, { type: "string", cellDates: true });
+  } else {
+    workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+  }
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) throw new Error("工作表为空");
+  return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+    header: 1,
+    raw: true,
+    defval: null,
+    blankrows: false
+  });
+}
+
+async function importOfficialBill() {
+  if (!state.billFile || state.billBusy) return;
+  state.billBusy = true;
+  el.importBillButton.disabled = true;
+  setBillStatus("正在读取账单...", { busy: true });
+  try {
+    let buffer;
+    let name = state.billFile.name;
+    if (/\.zip$/i.test(name)) {
+      setBillStatus("正在解压账单...", { busy: true });
+      const extracted = await extractZipBill(state.billFile, el.billZipPassword.value);
+      buffer = extracted.buffer;
+      name = extracted.name;
+    } else {
+      buffer = await state.billFile.arrayBuffer();
+    }
+    setBillStatus("正在解析交易记录...", { busy: true });
+    const rows = rowsFromWorkbookBuffer(buffer, name);
+    const parsed = parseOfficialBillRows(rows, name);
+    if (!parsed.items.length) throw new Error("没有找到可导入的收支记录");
+    const existingIds = new Set(state.records.map((record) => record.externalId).filter(Boolean));
+    const seen = new Set();
+    let duplicates = 0;
+    const items = [];
+    parsed.items.forEach((item) => {
+      if (item.externalId) {
+        if (existingIds.has(item.externalId) || seen.has(item.externalId)) {
+          duplicates += 1;
+          return;
+        }
+        seen.add(item.externalId);
+      }
+      items.push(item);
+    });
+    if (!items.length) {
+      const duplicateError = new Error(`这 ${duplicates} 笔账单都已经导入过了`);
+      duplicateError.code = "ALL_DUPLICATES";
+      duplicateError.count = duplicates;
+      throw duplicateError;
+    }
+    state.importItems = items;
+    el.billZipPassword.value = "";
+    const sourceLabel = parsed.platform === "微信" ? "微信账单" : parsed.platform === "支付宝" ? "支付宝账单" : "官方账单";
+    state.importHint = `已读取${sourceLabel}：${items.length} 笔；日期、名称、金额和分类都可以修改。`;
+    if (duplicates) state.importHint += ` 已自动跳过 ${duplicates} 笔之前导入过的交易。`;
+    if (parsed.skipped) state.importHint += ` 有 ${parsed.skipped} 行不是有效收支或状态不可用，已跳过。`;
+    renderImportPreview();
+    setBillStatus(`识别完成：${items.length} 笔，请核对下方结果`);
+    el.importPreview.scrollIntoView({ behavior: "smooth", block: "start" });
+    showToast(`已读取${sourceLabel} ${items.length} 笔${duplicates ? `，跳过重复 ${duplicates} 笔` : ""}`);
+  } catch (error) {
+    console.error(error);
+    if (error && error.code === "ALL_DUPLICATES") {
+      state.importItems = [];
+      state.importHint = "";
+      el.importPreview.hidden = true;
+      setBillStatus(`这 ${error.count} 笔都已导入过，无需重复导入`);
+      showToast(`这 ${error.count} 笔都已导入过`);
+      return;
+    }
+    const message = /password|密码|encrypted/i.test(String(error && error.message))
+      ? "ZIP 密码不正确，或压缩包已损坏"
+      : "账单没有读出来，请确认是微信/支付宝官方导出文件";
+    setBillStatus(message, { error: true });
+    showToast(message, "error");
+  } finally {
+    state.billBusy = false;
+    el.importBillButton.disabled = !state.billFile;
+  }
+}
 /* ---------- WeChat bill screenshot OCR ---------- */
 function loadTesseractScript() {
   if (window.Tesseract) return Promise.resolve(window.Tesseract);
@@ -2212,6 +2483,8 @@ function confirmImport() {
       amount: cents / 100,
       type,
       category,
+      externalId: item.externalId || "",
+      source: item.source || "导入",
       createdAt: new Date().toISOString()
     });
     if (record) newRecords.push(record);
@@ -2237,6 +2510,12 @@ function confirmImport() {
   el.importText.value = "";
   el.fileInput.value = "";
   el.fileName.textContent = "还没有选择文件";
+  state.billFile = null;
+  el.billInput.value = "";
+  el.billFileName.textContent = "支持 CSV / XLSX / 加密 ZIP";
+  el.billZipPassword.value = "";
+  el.importBillButton.disabled = true;
+  setBillStatus("选择文件后读取账单");
   el.importPreview.hidden = true;
   renderAll();
   showToast(`已导入 ${newRecords.length} 笔：支出 ${formatMoney(totals.expense)} · 收入 ${formatMoney(totals.income)}`);
@@ -2694,7 +2973,7 @@ function exportBackup() {
   }
   const payload = {
     app: "东东账本",
-    version: 9,
+    version: 10,
     exportedAt: new Date().toISOString(),
     records: state.records
   };
@@ -2918,6 +3197,28 @@ function bindImport() {
     if (file) handleOcrImageFile(file);
   });
   el.recognizeImageButton.addEventListener("click", recognizeBillScreenshot);
+
+  el.billInput.addEventListener("change", () => {
+    const file = el.billInput.files && el.billInput.files[0];
+    if (file) handleBillFile(file);
+  });
+  ["dragenter", "dragover"].forEach((type) => {
+    el.billDropzone.addEventListener(type, (event) => {
+      event.preventDefault();
+      el.billDropzone.classList.add("is-dragging");
+    });
+  });
+  ["dragleave", "drop"].forEach((type) => {
+    el.billDropzone.addEventListener(type, (event) => {
+      event.preventDefault();
+      el.billDropzone.classList.remove("is-dragging");
+    });
+  });
+  el.billDropzone.addEventListener("drop", (event) => {
+    const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+    if (file) handleBillFile(file);
+  });
+  el.importBillButton.addEventListener("click", importOfficialBill);
   el.importList.addEventListener("input", handleImportListInput);
   el.importList.addEventListener("change", handleImportListChange);
   el.importList.addEventListener("click", (event) => {

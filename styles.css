@@ -1,4 +1,4 @@
-﻿/* ============ 东东账本 v9 ============ */
+﻿/* ============ 东东账本 v10 ============ */
 :root {
   --paper: #F6F1E7;
   --paper-deep: #EFE7D9;
@@ -2024,4 +2024,11 @@ dialog::backdrop {
   .ocr-actions { align-items: stretch; flex-direction: column; }
   .ocr-actions .primary-button { width: 100%; margin-left: 0; }
   .ocr-preview img { max-height: 240px; }
+}
+/* ---------- Official bill import ---------- */
+.bill-password-row { margin-top: 14px; }
+.bill-password-row .stack-field { gap: 6px; }
+.bill-password-row .text-input { width: 100%; }
+@media (max-width: 390px) {
+  #importMode button { font-size: 11px; padding-left: 4px; padding-right: 4px; }
 }
