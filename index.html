@@ -1,0 +1,653 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>东东账本 · 每一笔，都算数</title>
+  <meta name="description" content="东东账本：记录收入与支出，导入账单，看清每一段日子的钱从哪里来、去了哪里。">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F1E7">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#F6F1E7">
+  <meta name="color-scheme" content="light">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="东东账本">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="assets/avatar.svg">
+  <link rel="apple-touch-icon" href="assets/avatar-180.png">
+  <link rel="stylesheet" href="styles.css?v=8.0.0">
+  <script src="vendor/xlsx.full.min.js" defer></script>
+  <script src="vendor/tesseract/tesseract.min.js" defer></script>
+  <script src="app.js?v=8.0.0" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+
+  <svg class="svg-sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-food" viewBox="0 0 24 24">
+      <path d="M3 2v7a3 3 0 0 0 3 3h2a3 3 0 0 0 3-3V2M7 2v20M21 15V2a5 5 0 0 0-5 5v6a2 2 0 0 0 2 2h3Zm0 0v7"/>
+    </symbol>
+    <symbol id="i-shopping" viewBox="0 0 24 24">
+      <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4ZM3 6h18M16 10a4 4 0 0 1-8 0"/>
+    </symbol>
+    <symbol id="i-transport" viewBox="0 0 24 24">
+      <path d="M4 6 3 11v9a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-1h10v1a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-9l-1-5H4ZM3 11h18M8 16h.01M16 16h.01"/>
+    </symbol>
+    <symbol id="i-game" viewBox="0 0 24 24">
+      <path d="M6 11h4M8 9v4M15 12h.01M18 10h.01M17.32 5H6.68a4 4 0 0 0-3.97 3.46l-.66 5.32a3 3 0 0 0 5.2 2.53L9 14h6l1.75 2.31a3 3 0 0 0 5.2-2.53l-.66-5.32A4 4 0 0 0 17.32 5Z"/>
+    </symbol>
+    <symbol id="i-fun" viewBox="0 0 24 24">
+      <path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3ZM6.2 5.3l3.1 3.9M12.4 3.4l3.1 4M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>
+    </symbol>
+    <symbol id="i-home" viewBox="0 0 24 24">
+      <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2ZM9 22V12h6v10"/>
+    </symbol>
+    <symbol id="i-health" viewBox="0 0 24 24">
+      <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7ZM3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/>
+    </symbol>
+    <symbol id="i-study" viewBox="0 0 24 24">
+      <path d="M12 7v14M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3Z"/>
+    </symbol>
+    <symbol id="i-gift" viewBox="0 0 24 24">
+      <path d="M20 12v10H4V12M2 7h20v5H2ZM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7ZM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7Z"/>
+    </symbol>
+    <symbol id="i-other" viewBox="0 0 24 24">
+      <circle cx="5" cy="12" r="1.2" fill="currentColor" stroke="none"/>
+      <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>
+      <circle cx="19" cy="12" r="1.2" fill="currentColor" stroke="none"/>
+      <path d="M3 4.5a1.5 1.5 0 0 1 1.5-1.5h15A1.5 1.5 0 0 1 21 4.5v15a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5Z"/>
+    </symbol>
+    <symbol id="i-salary" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 10h.01M18 14h.01"/></symbol>
+    <symbol id="i-award" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="m8.5 13.5-1.5 8 5-3 5 3-1.5-8"/></symbol>
+    <symbol id="i-briefcase" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></symbol>
+    <symbol id="i-trending" viewBox="0 0 24 24"><path d="m3 17 6-6 4 4 8-8M17 7h4v4"/></symbol>
+    <symbol id="i-envelope" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
+    <symbol id="i-refund" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18M7 15l4-5 3 3 5-7"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M5 21h14"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8ZM14 2v6h6M8 13h8M8 17h6"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 11v6M14 11v6"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9ZM19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8Z"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  </svg>
+
+  <div class="ambient" aria-hidden="true">
+    <span class="ambient-blob blob-one"></span>
+    <span class="ambient-blob blob-two"></span>
+    <span class="ambient-arc"></span>
+  </div>
+
+  <div class="app-shell">
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="#" data-nav="add" aria-label="东东账本首页">
+          <img class="brand-mark" src="assets/avatar.svg" alt="" width="44" height="44">
+          <span class="brand-copy">
+            <strong>东东账本</strong>
+            <small>每一笔，都算数</small>
+          </span>
+        </a>
+
+        <nav class="desktop-nav" aria-label="主导航">
+          <button class="nav-item is-active" type="button" data-nav="add">
+            <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg><span>记一笔</span>
+          </button>
+          <button class="nav-item" type="button" data-nav="import">
+            <svg class="icon" aria-hidden="true"><use href="#i-import"/></svg><span>导入</span>
+          </button>
+          <button class="nav-item" type="button" data-nav="report">
+            <svg class="icon" aria-hidden="true"><use href="#i-chart"/></svg><span>统计</span>
+          </button>
+          <button class="nav-item" type="button" data-nav="records">
+            <svg class="icon" aria-hidden="true"><use href="#i-list"/></svg><span>明细</span>
+          </button>
+        </nav>
+
+        <div class="header-end">
+          <button class="month-pill" id="monthPill" type="button" aria-label="查看本月统计">
+            <span>本月</span>
+            <strong id="headerMonthTotal">¥0.00</strong>
+          </button>
+          <div class="menu-wrap">
+            <button class="icon-button" id="menuButton" type="button" aria-label="数据管理" aria-expanded="false" aria-controls="dataMenu">
+              <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+            </button>
+            <div class="data-menu" id="dataMenu" hidden>
+              <div class="data-menu-head">
+                <span>数据管理</span>
+                <small id="dataMenuCount">0 笔记录</small>
+              </div>
+              <button type="button" data-action="export-backup">
+                <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>
+                <span>导出备份<small>换设备或版本时使用</small></span>
+              </button>
+              <button type="button" data-action="import-backup">
+                <svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg>
+                <span>导入备份<small>合并到当前账本</small></span>
+              </button>
+              <div class="menu-divider"></div>
+              <button class="danger" type="button" data-action="clear-all">
+                <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
+                <span>清空所有记录</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="page is-active" id="page-add" data-page="add">
+        <div class="page-heading add-heading">
+          <div>
+            <p class="eyebrow" id="greetingText">晚上好</p>
+            <h1>今天，记一笔</h1>
+            <p class="page-sub">收入或支出，都值得被好好记下。</p>
+          </div>
+          <div class="heading-date">
+            <span id="headingDate">2026年11月8日</span>
+            <small id="headingWeekday">星期日</small>
+          </div>
+        </div>
+
+        <div class="add-layout">
+          <form class="card entry-card" id="addForm" novalidate>
+            <div class="entry-type-row">
+              <div class="entry-type-switch" id="entryTypeSwitch" role="group" aria-label="收支类型">
+                <button class="is-active" type="button" data-entry-type="expense" aria-pressed="true"><span class="type-dot"></span>支出</button>
+                <button type="button" data-entry-type="income" aria-pressed="false"><span class="type-dot"></span>收入</button>
+              </div>
+              <span class="entry-type-hint" id="entryTypeHint">这笔钱花出去了</span>
+            </div>
+
+            <div class="entry-top">
+              <label class="field-label" for="amountInput" id="amountLabel">支出金额</label>
+              <div class="amount-wrap">
+                <span class="currency-mark" aria-hidden="true">¥</span>
+                <input id="amountInput" name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" maxlength="12" aria-describedby="amountError">
+              </div>
+              <p class="field-error" id="amountError" role="alert" hidden>请输入大于 0 的金额</p>
+            </div>
+
+            <div class="soft-divider"></div>
+
+            <label class="field-label" for="nameInput" id="nameLabel">花在了什么上</label>
+            <input class="text-input name-input" id="nameInput" name="name" type="text" autocomplete="off" maxlength="40" placeholder="比如：楼下的冰美式">
+
+            <div class="quick-names" id="quickNames" aria-label="常用名称"></div>
+
+            <div class="field-head">
+              <span class="field-label">分类</span>
+              <span class="field-hint">选一个最接近的就好</span>
+            </div>
+            <div class="category-grid" id="categoryPicker" role="group" aria-label="收支分类"></div>
+
+            <div class="date-section">
+              <div class="field-head">
+                <span class="field-label">日期</span>
+                <span class="field-hint" id="dateHint">默认今天</span>
+              </div>
+              <div class="date-control">
+                <button class="date-main" id="dateDisplay" type="button" aria-label="选择日期">
+                  <svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>
+                  <span class="date-copy">
+                    <strong id="dateDisplayText">2026年11月8日</strong>
+                    <small id="dateDisplayWeekday">星期日</small>
+                  </span>
+                  <span class="date-edit">修改<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></span>
+                </button>
+                <input class="native-date" id="expenseDate" type="date" tabindex="-1" aria-hidden="true">
+              </div>
+              <div class="date-quick" id="dateQuick" role="group" aria-label="近一周日期"></div>
+            </div>
+
+            <button class="primary-button save-button" id="saveButton" type="submit">
+              <span id="saveButtonText">记下这笔支出</span>
+              <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+            </button>
+          </form>
+
+          <aside class="side-stack" aria-label="账本概览">
+            <section class="today-card">
+              <span class="card-orbit orbit-one" aria-hidden="true"></span>
+              <span class="card-orbit orbit-two" aria-hidden="true"></span>
+              <div class="today-top">
+                <span>今日结余</span>
+                <span class="today-date" id="todayCardDate">11月8日</span>
+              </div>
+              <strong class="today-amount" id="todayTotal">¥0.00</strong>
+              <p class="today-meta" id="todayCount">今天还没有收支记录</p>
+              <div class="today-split">
+                <div><span>支出</span><strong id="todayExpense">¥0.00</strong></div>
+                <div><span>收入</span><strong id="todayIncome">¥0.00</strong></div>
+              </div>
+              <div class="today-categories" id="todayCategories">
+                <span class="empty-note">第一笔，从今天开始。</span>
+              </div>
+            </section>
+
+            <section class="card month-card">
+              <div class="card-head">
+                <div>
+                  <h2>本月结余</h2>
+                  <p id="monthLabel">2026年11月</p>
+                </div>
+                <button class="text-link" id="monthReportButton" type="button">看统计<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+              </div>
+              <strong class="month-amount" id="monthTotal">¥0.00</strong>
+              <div class="month-meta">
+                <div><span>收入</span><strong id="monthIncome">¥0.00</strong></div>
+                <div><span>支出</span><strong id="monthExpense">¥0.00</strong></div>
+                <div><span>记录</span><strong id="monthCount">0 笔</strong></div>
+              </div>
+            </section>
+
+            <div class="quote-card">
+              <svg class="icon quote-icon" aria-hidden="true"><use href="#i-spark"/></svg>
+              <p>把每一笔记下来，钱就有了方向。</p>
+              <span>东东账本 · 记下小日子</span>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="page" id="page-import" data-page="import" hidden>
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">智能导入</p>
+            <h1>把账单，交给东东</h1>
+            <p class="page-sub">粘贴文字、上传表格，或直接识别微信账单截图。结果先核对，再入账。</p>
+          </div>
+        </div>
+
+        <div class="card import-card">
+          <div class="segmented-control" id="importMode" role="tablist" aria-label="导入方式">
+            <button class="is-active" type="button" role="tab" aria-selected="true" data-import-mode="text">粘贴文字</button>
+            <button type="button" role="tab" aria-selected="false" data-import-mode="file">上传表格</button>
+            <button type="button" role="tab" aria-selected="false" data-import-mode="image">截图识别</button>
+          </div>
+
+          <div class="import-panel" id="textImportPanel">
+            <div class="textarea-wrap">
+              <textarea id="importText" rows="7" spellcheck="false" aria-label="粘贴账单文字" placeholder="例如：&#10;2026年11月8日&#10;中饭：-10&#10;工资：+8000&#10;2026年11月7日&#10;打车：-23&#10;收到红包：+200"></textarea>
+              <div class="textarea-foot">
+                <span>日期可单独一行（如 11.8）；下面连续写多笔。+ 是收入，- 是支出</span>
+                <button type="button" id="sampleButton">填入示例</button>
+              </div>
+              <p class="import-rule">判断顺序：先看 <b>+ / -</b>；没有符号时，再按名称关键词和分类判断。</p>
+            </div>
+            <div class="import-actions">
+              <p><svg class="icon" aria-hidden="true"><use href="#i-spark"/></svg>会自动识别日期、收支、名称、金额和分类</p>
+              <button class="primary-button compact" id="parseTextButton" type="button">
+                <span>开始识别</span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="import-panel" id="imageImportPanel" hidden>
+            <label class="dropzone screenshot-dropzone" id="imageDropzone" for="imageInput">
+              <input id="imageInput" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+              <span class="dropzone-icon"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></span>
+              <strong>上传微信账单截图</strong>
+              <span>只读取每笔名称、金额、日期；不读取顶部合计</span>
+              <small id="imageFileName">支持 PNG / JPG / WebP</small>
+            </label>
+            <div class="ocr-actions">
+              <div class="ocr-status" id="ocrStatus" role="status">选择截图后开始识别</div>
+              <button class="primary-button compact" id="recognizeImageButton" type="button" disabled>
+                <span>开始识别</span><svg class="icon" aria-hidden="true"><use href="#i-spark"/></svg>
+              </button>
+            </div>
+            <div class="ocr-preview" id="ocrPreview" hidden>
+              <img id="ocrPreviewImage" alt="待识别的账单截图">
+            </div>
+            <p class="import-rule">首次识别需要加载约 10MB 中文识别组件；日期模糊会自动增强重试，改过的名称和分类会记住。</p>
+            <div class="import-note">
+              <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
+              <span>只读取每笔的名称、金额、日期，不读取截图顶部的本月合计。请尽量使用清晰、未裁切的微信账单截图。</span>
+            </div>
+          </div>
+
+          <div class="import-panel" id="fileImportPanel" hidden>
+            <label class="dropzone" id="dropzone" for="fileInput">
+              <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" hidden>
+              <span class="dropzone-icon"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg></span>
+              <strong>点击选择，或把表格拖到这里</strong>
+              <span>支持 .xlsx / .xls / .csv，读取第一个工作表</span>
+              <small id="fileName">还没有选择文件</small>
+            </label>
+            <div class="import-note">
+              <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
+              <span>建议表头为：日期、类型、名称、金额、分类。有类型列时优先看类型；没有类型列时，金额的 + / - 会作为判断依据。</span>
+            </div>
+            <div class="template-row">
+              <span>第一次导入？可以先按模板整理。</span>
+              <button type="button" id="downloadTemplateButton">下载 CSV 模板</button>
+            </div>
+          </div>
+        </div>
+
+        <section class="card preview-card" id="importPreview" hidden>
+          <div class="preview-head">
+            <div>
+              <h2>识别结果 <span id="importCount">0</span> 笔</h2>
+              <p id="importHint">每一笔都可以修改，确认后再入账。</p>
+            </div>
+            <label class="select-all">
+              <input type="checkbox" id="selectAllImports" checked>
+              <span>全选</span>
+            </label>
+          </div>
+          <div class="import-list" id="importList"></div>
+          <div class="preview-footer">
+            <div class="preview-total">
+              <span>将导入</span>
+              <div class="preview-total-pair">
+                <strong id="importExpenseTotal">支出 ¥0.00</strong>
+                <strong id="importIncomeTotal">收入 ¥0.00</strong>
+              </div>
+            </div>
+            <button class="primary-button compact" id="confirmImportButton" type="button">确认导入 0 笔</button>
+          </div>
+        </section>
+      </section>
+
+      <section class="page" id="page-report" data-page="report" hidden>
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">收支统计</p>
+            <h1>钱都去了哪里？</h1>
+            <p class="page-sub">选一段时间，看清每一笔收入和支出的去向。</p>
+          </div>
+        </div>
+
+        <div class="card filter-card">
+          <div class="segmented-control range-presets" id="rangePresets" role="group" aria-label="统计范围">
+            <button type="button" data-preset="7d">近 7 天</button>
+            <button type="button" data-preset="week">本周</button>
+            <button type="button" data-preset="month">本月</button>
+            <button type="button" data-preset="30d">近 30 天</button>
+            <button type="button" data-preset="custom">自定义</button>
+          </div>
+          <div class="range-row">
+            <label class="date-field">
+              <span>开始日期</span>
+              <input type="date" id="rangeStart">
+            </label>
+            <span class="range-dash" aria-hidden="true">—</span>
+            <label class="date-field">
+              <span>结束日期</span>
+              <input type="date" id="rangeEnd">
+            </label>
+            <button class="primary-button compact generate-button" id="generateReportButton" type="button">
+              <span>生成报表</span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+            </button>
+          </div>
+          <p class="field-error" id="rangeError" role="alert" hidden></p>
+        </div>
+
+        <div class="card empty-state report-empty" id="reportEmpty">
+          <div class="empty-illustration" aria-hidden="true">
+            <span class="empty-sun"></span>
+            <span class="empty-page"></span>
+            <span class="empty-line line-a"></span>
+            <span class="empty-line line-b"></span>
+            <span class="empty-line line-c"></span>
+          </div>
+          <h2>这段时间还没有收支记录</h2>
+          <p>换一个日期看看，或者先去记下最近的一笔。</p>
+          <button class="secondary-button" type="button" data-nav="add">去记一笔</button>
+        </div>
+
+        <div id="reportResult" hidden>
+          <section class="report-hero">
+            <span class="hero-glow" aria-hidden="true"></span>
+            <div class="report-hero-top">
+              <span id="reportPeriodLabel">2026.11.02 — 2026.11.08</span>
+              <span id="reportDayCount">共 7 天</span>
+            </div>
+            <div class="report-total-row">
+              <div class="report-money-block">
+                <span class="metric-label">支出合计</span>
+                <strong class="report-total" id="reportExpenseTotal">¥0.00</strong>
+              </div>
+              <div class="report-money-block income">
+                <span class="metric-label">收入合计</span>
+                <strong class="report-income" id="reportIncomeTotal">¥0.00</strong>
+              </div>
+            </div>
+            <div class="report-metrics">
+              <div>
+                <span>这段时间结余</span>
+                <strong id="reportNet">¥0.00</strong>
+              </div>
+              <div>
+                <span>日均支出</span>
+                <strong id="reportAvg">¥0.00</strong>
+              </div>
+              <div>
+                <span>记录</span>
+                <strong id="reportRecordCount">0 笔</strong>
+              </div>
+            </div>
+          </section>
+
+          <div class="report-grid">
+            <section class="card breakdown-card">
+              <div class="card-head">
+                <div>
+                  <h2>分类去向</h2>
+                  <p id="categorySubtitle">支出花在哪里</p>
+                </div>
+                <div class="mini-switch" id="reportCategoryType" role="group" aria-label="分类统计类型">
+                  <button class="is-active" type="button" data-category-type="expense" aria-pressed="true">支出</button>
+                  <button type="button" data-category-type="income" aria-pressed="false">收入</button>
+                </div>
+              </div>
+              <div class="breakdown-body">
+                <div class="donut-wrap">
+                  <div class="donut" id="categoryDonut">
+                    <div class="donut-hole">
+                      <span id="donutLabel">支出合计</span>
+                      <strong id="donutTotal">¥0.00</strong>
+                    </div>
+                  </div>
+                </div>
+                <div class="category-legend" id="categoryLegend"></div>
+              </div>
+            </section>
+
+            <section class="card chart-card">
+              <div class="card-head">
+                <div>
+                  <h2 id="chartTitle">每日支出</h2>
+                  <p id="chartSubtitle">哪几天花得比较多</p>
+                </div>
+                <div class="card-head-tools">
+                  <div class="mini-switch" id="reportChartType" role="group" aria-label="每日图表类型">
+                    <button class="is-active" type="button" data-chart-type="expense" aria-pressed="true">支出</button>
+                    <button type="button" data-chart-type="income" aria-pressed="false">收入</button>
+                  </div>
+                  <span class="card-badge" id="chartBadge">7 天</span>
+                </div>
+              </div>
+              <div class="chart-legend" id="chartLegend" aria-hidden="true">
+                <span><i class="expense"></i>支出</span>
+              </div>
+              <div class="chart-shell">
+                <div class="chart-y" id="chartYAxis">
+                  <span>¥0</span><span>¥0</span><span>¥0</span>
+                </div>
+                <div class="chart-scroll">
+                  <div class="chart-plot" id="dailyChart"></div>
+                </div>
+              </div>
+              <p class="chart-tip" id="chartTip" hidden>左右滑动查看完整日期</p>
+            </section>
+          </div>
+
+          <section class="card daily-list-card">
+            <div class="card-head">
+              <div>
+                <h2>每天收支</h2>
+                <p id="dailyListSummary">共 0 天有记录</p>
+              </div>
+            </div>
+            <div class="daily-list" id="dailyList"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="page" id="page-records" data-page="records" hidden>
+        <div class="page-heading records-heading">
+          <div>
+            <p class="eyebrow">全部明细</p>
+            <h1>每一笔，都有迹可循</h1>
+            <p class="page-sub">点开任意一笔，可以修改或删除。</p>
+          </div>
+          <div class="records-summary">
+            <span id="recordsSummaryCount">0 笔</span>
+            <strong id="recordsSummaryTotal">¥0.00</strong>
+            <small id="recordsSummaryFlow">支出 ¥0.00 · 收入 ¥0.00</small>
+          </div>
+        </div>
+
+        <div class="records-toolbar">
+          <label class="search-field">
+            <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+            <input type="search" id="recordSearch" aria-label="搜索名称或分类" placeholder="搜索名称或分类" autocomplete="off">
+          </label>
+          <label class="select-field">
+            <span class="sr-only">筛选收支</span>
+            <select id="recordTypeFilter">
+              <option value="all">全部收支</option>
+              <option value="expense">只看支出</option>
+              <option value="income">只看收入</option>
+            </select>
+          </label>
+          <label class="select-field">
+            <span class="sr-only">筛选分类</span>
+            <select id="recordCategoryFilter">
+              <option value="all">全部分类</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="record-groups" id="recordsList"></div>
+
+        <div class="card empty-state" id="recordsEmpty">
+          <div class="empty-illustration small" aria-hidden="true">
+            <span class="empty-sun"></span>
+            <span class="empty-page"></span>
+            <span class="empty-line line-a"></span>
+            <span class="empty-line line-b"></span>
+          </div>
+          <h2 id="recordsEmptyTitle">账本还是空的</h2>
+          <p id="recordsEmptyText">记下第一笔，往后的日子就有迹可循。</p>
+          <button class="secondary-button" type="button" data-nav="add">去记一笔</button>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="底部导航">
+      <button class="bottom-item is-active" type="button" data-nav="add">
+        <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg><span>记一笔</span>
+      </button>
+      <button class="bottom-item" type="button" data-nav="import">
+        <svg class="icon" aria-hidden="true"><use href="#i-import"/></svg><span>导入</span>
+      </button>
+      <button class="bottom-item" type="button" data-nav="report">
+        <svg class="icon" aria-hidden="true"><use href="#i-chart"/></svg><span>统计</span>
+      </button>
+      <button class="bottom-item" type="button" data-nav="records">
+        <svg class="icon" aria-hidden="true"><use href="#i-list"/></svg><span>明细</span>
+      </button>
+    </nav>
+  </div>
+
+  <dialog class="sheet" id="recordDialog" aria-labelledby="recordDialogTitle">
+    <form class="sheet-inner" id="editForm" novalidate>
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <div>
+          <p class="eyebrow">修改记录</p>
+          <h2 id="recordDialogTitle">这笔记录</h2>
+        </div>
+        <button class="icon-button" id="closeRecordDialog" type="button" aria-label="关闭">
+          <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <label class="stack-field">
+          <span>金额</span>
+          <div class="amount-wrap small">
+            <span class="currency-mark" aria-hidden="true">¥</span>
+            <input id="editAmount" type="text" inputmode="decimal" autocomplete="off" maxlength="12">
+          </div>
+        </label>
+        <label class="stack-field">
+          <span>名称</span>
+          <input class="text-input" id="editName" type="text" maxlength="40" autocomplete="off">
+        </label>
+        <div class="edit-row">
+          <label class="stack-field">
+            <span>收支</span>
+            <select class="select-input" id="editType">
+              <option value="expense">支出</option>
+              <option value="income">收入</option>
+            </select>
+          </label>
+          <label class="stack-field">
+            <span>分类</span>
+            <select class="select-input" id="editCategory"></select>
+          </label>
+        </div>
+        <p class="field-hint">修改分类后，同名、同类型的记录会一起同步。</p>
+        <label class="stack-field">
+          <span>日期</span>
+          <input class="select-input" id="editDate" type="date">
+        </label>
+        <p class="field-error" id="editError" role="alert" hidden>请检查金额、名称和日期</p>
+      </div>
+      <div class="sheet-actions">
+        <button class="danger-button" id="deleteRecordButton" type="button">
+          <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg><span>删除</span>
+        </button>
+        <button class="primary-button compact" type="submit">保存修改</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="confirm-dialog" id="confirmDialog" aria-labelledby="confirmTitle">
+    <form method="dialog" class="confirm-inner">
+      <span class="confirm-icon"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg></span>
+      <h2 id="confirmTitle">确认操作</h2>
+      <p id="confirmMessage">这一步无法撤销。</p>
+      <div class="confirm-actions">
+        <button class="secondary-button" type="submit" value="cancel">取消</button>
+        <button class="danger-solid" type="submit" value="confirm" id="confirmOkButton">确认删除</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <input id="backupInput" type="file" accept=".json,application/json" hidden>
+
+  <noscript>
+    <div class="noscript">东东账本需要开启 JavaScript 才能使用，请在浏览器设置中开启后刷新。</div>
+  </noscript>
+</body>
+</html>
